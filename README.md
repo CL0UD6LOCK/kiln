@@ -30,7 +30,7 @@ MIT
 stateDiagram-v2
     [*] --> Pending
     Pending --> Running: worker claims (run_at <= now)
-    Running --> Success: handler==nil
+    Running --> Succeeded: handler==nil
     Running --> Failed: handler!=nil
     Failed --> Retry: attempts<max_attempts
     Failed --> Close: attempts>=max_attempts
