@@ -34,4 +34,6 @@ stateDiagram-v2
     Running --> Failed: handler!=nil
     Failed --> Retry: attempts<max_attempts
     Failed --> Close: attempts>=max_attempts
+    Succeeded --> [*]
+    Close --> [*]
 ```
