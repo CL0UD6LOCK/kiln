@@ -21,3 +21,15 @@ Put tasks in, workers fire them, and failed ones get retried.
 ## License
 
 MIT
+
+## Design
+
+### Task lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Red
+    Red --> Green: timer 30s
+    Green --> Yellow: timer 25s
+    Yellow --> Red: timer 5s
+```
