@@ -31,7 +31,7 @@ stateDiagram-v2
     [*] --> Pending
     Pending --> Running: worker claims (run_at <= now)
     Running --> Succeeded: handler==nil
-    Running --> Pending: handler!=nil&&attempts#ltmax_attempts
+    Running --> Pending: handler!=nil&&attempts#lt;max_attempts
     Running --> Failed: attempts>=max_attempts
     Succeeded --> [*]
     Failed -->[*]
