@@ -1,6 +1,7 @@
 package base
 
 import (
+	"context"
 	"time"
 )
 
@@ -24,4 +25,8 @@ type TaskMessage struct {
 	LastError   string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+type Store interface {
+	Enqueue(ctx context.Context, msg *TaskMessage) error
 }
