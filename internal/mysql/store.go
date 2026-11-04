@@ -17,7 +17,7 @@ func NewStore(db *sql.DB) *Store {
 }
 
 func (s *Store) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
-	if msg.MaxAttempts == 0 {
+	if msg.MaxAttempts <= 0 {
 		msg.MaxAttempts = 3
 	}
 	if msg.RunAt.IsZero() {
