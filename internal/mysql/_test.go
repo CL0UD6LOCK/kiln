@@ -31,7 +31,7 @@ func TestEnqueue_Defaults(t *testing.T) {
 		Type:    "email:send",
 		Payload: []byte(`{"to":"a@b.com"}`),
 	}
-	err := store.Enqueue(context.Background().msg)
+	err := store.Enqueue(context.Background(), msg)
 
 	if err != nil {
 		t.Fatalf("Enqueue error: %v", err)
@@ -45,22 +45,25 @@ func TestEnqueue_Defaults(t *testing.T) {
 }
 
 func TestEnqueue_KeyValue(t *testing.T) {
-	msg:=&base.TaskMessage{
-		Type:	"email:send",
-		Payload: []byte(`{}`),
-		MaxAttempts: 5
+	db := openTestDB(t)
+	defer db.Close()
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Type:        "email:send",
+		Payload:     []byte(`{}`),
+		MaxAttempts: 5,
 	}
-	err:=store.Enqueue(context.Background().msg)
-	if err!=nil{
-		t.Fatalf("Enqueue error: %v",err)
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
 	}
 	if msg.ID <= 0 {
 		t.Fatalf("ID %d invalid", msg.ID)
 	}
-	if msg.ID != 5 {
+	if msg.MaxAttempts != 5 {
 		t.Fatalf("MaxAttempts %d error", msg.MaxAttempts)
 	}
-	if msg.RunAt.IsZero(){
+	if msg.RunAt.IsZero() {
 		t.Fatalf("RunAt time error: null")
 	}
 }
