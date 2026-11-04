@@ -43,3 +43,24 @@ func TestEnqueue_Defaults(t *testing.T) {
 		t.Fatalf("MaxAttempts %d error", msg.MaxAttempts)
 	}
 }
+
+func TestEnqueue_KeyValue(t *testing.T) {
+	msg:=&base.TaskMessage{
+		Type:	"email:send",
+		Payload: []byte(`{}`),
+		MaxAttempts: 5
+	}
+	err:=store.Enqueue(context.Background().msg)
+	if err!=nil{
+		t.Fatalf("Enqueue error: %v",err)
+	}
+	if msg.ID <= 0 {
+		t.Fatalf("ID %d invalid", msg.ID)
+	}
+	if msg.ID != 5 {
+		t.Fatalf("MaxAttempts %d error", msg.MaxAttempts)
+	}
+	if msg.RunAt.IsZero(){
+		t.Fatalf("RunAt time error: null")
+	}
+}
