@@ -67,3 +67,16 @@ func TestEnqueue_KeyValue(t *testing.T) {
 		t.Fatalf("RunAt time error: null")
 	}
 }
+
+func TestEnqueue_InvalidJSON(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte("not json"),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}
