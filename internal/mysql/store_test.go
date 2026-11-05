@@ -79,4 +79,7 @@ func TestEnqueue_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
+	if msg.ID <= 0 {
+		t.Fatalf("ID %d invalid", msg.ID)
+	}
 }
