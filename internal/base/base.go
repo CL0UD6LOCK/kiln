@@ -2,6 +2,7 @@ package base
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -13,6 +14,8 @@ const (
 	StatusSucceeded Status = "succeeded"
 	StatusFailed    Status = "failed"
 )
+
+var ErrNoTask = errors.New("kiln: no task available")
 
 type TaskMessage struct {
 	ID          int64
