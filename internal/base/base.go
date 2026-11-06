@@ -32,4 +32,5 @@ type TaskMessage struct {
 
 type Store interface {
 	Enqueue(ctx context.Context, msg *TaskMessage) error
+	Claim(ctx context.Context) (*TaskMessage, error)
 }
