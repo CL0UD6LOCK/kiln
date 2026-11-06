@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"testing"
 
@@ -84,11 +85,21 @@ func TestEnqueue_InvalidJSON(t *testing.T) {
 	}
 }
 
+func resetTasks(t *testing.T, db *sql.DB) {
+	t.Helper() //报错时显示调用行
+	if _, err := db.Exec("DELETE FROM tasks"); err != nil {
+		t.Fatalf("reset tasks: %v", err)
+	}
+}
+
 func TestClaim_ReturnsPendingTask(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
 	store := NewStore(db)
-	msg := &base.TaskMessage{}
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	resetTasks(t, db)
 	err := store.Enqueue(context.Background(), msg)
 	if err != nil {
 		t.Fatalf("Enqueue error: %v", err)
@@ -98,9 +109,21 @@ func TestClaim_ReturnsPendingTask(t *testing.T) {
 		t.Fatalf("Claim error: %v", err)
 	}
 	if res.ID != msg.ID {
-		t.Fatalf("Error: id changed")
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
 	}
 	if res.Status != base.StatusRunning {
 		t.Fatalf("Error: set status failed")
+	}
+}
+
+func TestClaim_EmptyQueue(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	store := NewStore(db)
+
+	resetTasks(t, db)
+	res, err := store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) || res != nil {
+		t.Fatalf("Claim error")
 	}
 }
