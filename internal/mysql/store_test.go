@@ -83,3 +83,24 @@ func TestEnqueue_InvalidJSON(t *testing.T) {
 		t.Fatalf("ID %d invalid", msg.ID)
 	}
 }
+
+func TestClaim_ReturnsPendingTask(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	store := NewStore(db)
+	msg := &base.TaskMessage{}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: id changed")
+	}
+	if res.Status != base.StatusRunning {
+		t.Fatalf("Error: set status failed")
+	}
+}
