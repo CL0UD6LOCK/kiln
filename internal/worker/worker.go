@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/CL0UD6LOCK/kiln/internal/base"
@@ -15,6 +16,15 @@ type worker struct {
 	store        base.Store
 	handler      Handler
 	pollInterval time.Duration
+}
+
+type Pool struct {
+	store        base.Store
+	handler      Handler
+	concurrency  int
+	pollInterval time.Duration
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
 }
 
 func (w *worker) run(ctx context.Context) {
@@ -37,4 +47,35 @@ func (w *worker) run(ctx context.Context) {
 			log.Printf("kiln: task %d failed: %v", msg.ID, err)
 		}
 	}
+}
+
+func NewPool(store base.Store, h Handler, concurrency int, pollInterval time.Duration) *Pool {
+	return &Pool{
+		store:        store,
+		handler:      h,
+		concurrency:  concurrency,
+		pollInterval: pollInterval,
+	}
+}
+
+func (p *Pool) Start() {
+	ctx, cancel := context.WithCancel(context.Background())
+	p.cancel = cancel
+	for i := 0; i < p.concurrency; i++ {
+		w := &worker{
+			store:        p.store,
+			handler:      p.handler,
+			pollInterval: p.pollInterval,
+		}
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			w.run(ctx)
+		}()
+	}
+}
+
+func (p *Pool) Shutdown() {
+	p.cancel()
+	p.wg.Wait()
 }
