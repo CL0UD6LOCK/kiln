@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/CL0UD6LOCK/kiln/internal/base"
 	"github.com/CL0UD6LOCK/kiln/internal/mysql"
@@ -42,5 +43,25 @@ func TestPool_ProcessesAllTasks(t *testing.T) {
 		}
 		want[msg.ID] = true
 	}
+	done := make(chan int64, 3)
+	h := func(ctx context.Context, msg *base.TaskMessage) error {
+		done <- msg.ID
+		return nil
+	}
 
+	pool := NewPool(store, h, 2, 50*time.Millisecond)
+	pool.Start()
+	defer pool.Shutdown()
+
+	for i := 0; i < 3; i++ {
+		select {
+		case id := <-done:
+			if !want[id] {
+				t.Fatalf("got unexpected task id %d", id)
+			}
+			delete(want, id)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timeout: %d tasks not processed", len(want))
+		}
+	}
 }
