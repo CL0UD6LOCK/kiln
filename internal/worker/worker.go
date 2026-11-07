@@ -22,15 +22,16 @@ func (w *worker) run(ctx context.Context) {
 		msg, err := w.store.Claim(ctx)
 		if err != nil {
 			if !errors.Is(err, base.ErrNoTask) {
-				log.Printf("kiln: claim failed: %v", err)
+				if ctx.Err() == nil {
+					log.Printf("kiln: claim failed: %v", err)
+				}
 			}
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(w.pollInterval):
-				break
+				continue //空队列是正常情况
 			}
-			continue //空队列是正常情况
 		}
 		if err := w.handler(ctx, msg); err != nil {
 			log.Printf("kiln: task %d failed: %v", msg.ID, err)
