@@ -16,6 +16,7 @@ const (
 )
 
 var ErrNoTask = errors.New("kiln: no task available")
+var ErrTaskNotRunning = errors.New("kiln: task not running")
 
 type TaskMessage struct {
 	ID          int64

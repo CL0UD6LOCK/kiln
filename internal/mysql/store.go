@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/CL0UD6LOCK/kiln/internal/base"
@@ -68,7 +69,18 @@ func (s *Store) Claim(ctx context.Context) (*base.TaskMessage, error) {
 }
 
 func (s *Store) MarkSucceeded(ctx context.Context, id int64) error {
-
+	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET status=?,updated_at=NOW() WHERE id=? AND status=?", base.StatusSucceeded, id, base.StatusRunning)
+	if err != nil {
+		return fmt.Errorf("mark succeeded id=%d: %w", id, err)
+	}
+	rowscount, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rowscount == 0 {
+		return fmt.Errorf("no task in running: %w", base.ErrTaskNotRunning)
+	}
+	return nil
 }
 
 func (s *Store) MarkFailed(ctx context.Context, id int64, errMsg string) error {
