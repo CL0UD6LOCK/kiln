@@ -66,3 +66,11 @@ func (s *Store) Claim(ctx context.Context) (*base.TaskMessage, error) {
 	msg.Status = base.StatusRunning
 	return msg, nil
 }
+
+func (s *Store) MarkSucceeded(ctx context.Context, id int64) error {
+
+}
+
+func (s *Store) MarkFailed(ctx context.Context, id int64, errMsg string) error {
+
+}
