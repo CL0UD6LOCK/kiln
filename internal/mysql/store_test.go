@@ -217,7 +217,8 @@ func TestMarkFailed_Final(t *testing.T) {
 	db.Exec("DELETE FROM tasks")
 	store := NewStore(db)
 	msg := &base.TaskMessage{
-		Payload: []byte(`{}`),
+		Payload:     []byte(`{}`),
+		MaxAttempts: 2,
 	}
 	err := store.Enqueue(context.Background(), msg)
 	if err != nil {
@@ -229,5 +230,58 @@ func TestMarkFailed_Final(t *testing.T) {
 	}
 	if res.ID != msg.ID {
 		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
+	err = store.MarkFailed(context.Background(), msg.ID, "boom")
+	if err != nil {
+		t.Fatalf("mark failed error: %v", err)
+	}
+	var status string
+	var attempts int
+	var lastErr string
+	err = db.QueryRowContext(context.Background(), "SELECT attempts, status, last_error FROM tasks WHERE id = ?", msg.ID).Scan(&attempts, &status, &lastErr)
+	if err != nil {
+		t.Fatalf("queryrow error: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("status = %q, want pending", status)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+	if lastErr != "boom" {
+		t.Fatalf("last_error = %q, want boom", lastErr)
+	}
+	err = store.MarkFailed(context.Background(), msg.ID, "boom")
+	if err != nil {
+		t.Fatalf("mark failed error: %v", err)
+	}
+	_, err = db.Exec("UPDATE tasks SET run_at = NOW() WHERE id = ?", msg.ID)
+	if err != nil {
+		t.Fatalf("Exec error: %v", err)
+	}
+	err = db.QueryRowContext(context.Background(), "SELECT attempts, status, last_error FROM tasks WHERE id = ?", msg.ID).Scan(&attempts, &status, &lastErr)
+	if err != nil {
+		t.Fatalf("queryrow error: %v", err)
+	}
+	if status != "failed" {
+		t.Fatalf("status = %q, want failed", status)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if lastErr != "boom" {
+		t.Fatalf("last_error = %q, want boom", lastErr)
+	}
+	_, err = store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) {
+		t.Fatalf("err = %v, want ErrNoTask", err)
+	}
+	_, err = db.Exec("UPDATE tasks SET run_at = NOW() WHERE id = ?", msg.ID)
+	if err != nil {
+		t.Fatalf("Exec error: %v", err)
+	}
+	_, err = store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) {
+		t.Fatalf("err = %v, want ErrNoTask", err)
 	}
 }
