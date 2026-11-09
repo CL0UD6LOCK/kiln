@@ -166,9 +166,68 @@ func TestMarkSucceeded(t *testing.T) {
 }
 
 func TestMarkFailed_Retry(t *testing.T) {
-
+	db := openTestDB(t)
+	defer db.Close()
+	db.Exec("DELETE FROM tasks")
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload:     []byte(`{}`),
+		MaxAttempts: 2,
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
+	err = store.MarkFailed(context.Background(), msg.ID, "boom")
+	if err != nil {
+		t.Fatalf("mark failed error: %v", err)
+	}
+	var status string
+	var attempts int
+	var lastErr string
+	err = db.QueryRowContext(context.Background(), "SELECT attempts, status, last_error FROM tasks WHERE id = ?", msg.ID).Scan(&attempts, &status, &lastErr)
+	if err != nil {
+		t.Fatalf("queryrow error: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("status = %q, want pending", status)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+	if lastErr != "boom" {
+		t.Fatalf("last_error = %q, want boom", lastErr)
+	}
+	_, err = store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) { //指数退避未生效
+		t.Fatalf("err = %v, want ErrNoTask", err)
+	}
 }
 
 func TestMarkFailed_Final(t *testing.T) {
-
+	db := openTestDB(t)
+	defer db.Close()
+	db.Exec("DELETE FROM tasks")
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
 }
