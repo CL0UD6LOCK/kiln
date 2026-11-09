@@ -251,13 +251,20 @@ func TestMarkFailed_Final(t *testing.T) {
 	if lastErr != "boom" {
 		t.Fatalf("last_error = %q, want boom", lastErr)
 	}
-	err = store.MarkFailed(context.Background(), msg.ID, "boom")
-	if err != nil {
-		t.Fatalf("mark failed error: %v", err)
-	}
 	_, err = db.Exec("UPDATE tasks SET run_at = NOW() WHERE id = ?", msg.ID)
 	if err != nil {
 		t.Fatalf("Exec error: %v", err)
+	}
+	res, err = store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
+	err = store.MarkFailed(context.Background(), msg.ID, "boom2")
+	if err != nil {
+		t.Fatalf("mark failed error: %v", err)
 	}
 	err = db.QueryRowContext(context.Background(), "SELECT attempts, status, last_error FROM tasks WHERE id = ?", msg.ID).Scan(&attempts, &status, &lastErr)
 	if err != nil {
@@ -269,8 +276,8 @@ func TestMarkFailed_Final(t *testing.T) {
 	if attempts != 2 {
 		t.Fatalf("attempts = %d, want 2", attempts)
 	}
-	if lastErr != "boom" {
-		t.Fatalf("last_error = %q, want boom", lastErr)
+	if lastErr != "boom2" {
+		t.Fatalf("last_error = %q, want boom2", lastErr)
 	}
 	_, err = store.Claim(context.Background())
 	if !errors.Is(err, base.ErrNoTask) {
