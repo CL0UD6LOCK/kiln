@@ -43,8 +43,17 @@ func (w *worker) run(ctx context.Context) {
 				continue //空队列是正常情况
 			}
 		}
-		if err := w.handler(ctx, msg); err != nil {
+		err = w.handler(ctx, msg)
+		if err != nil {
+			if err := w.store.MarkFailed(ctx, msg.ID, err.Error()); err != nil {
+				log.Printf("kiln: mark task %d as failed: %v", msg.ID, err)
+			}
 			log.Printf("kiln: task %d failed: %v", msg.ID, err)
+		} else {
+			err = w.store.MarkSucceeded(ctx, msg.ID)
+			if err != nil {
+				log.Printf("kiln: mark task %d as succeeded: %v", msg.ID, err)
+			}
 		}
 	}
 }
