@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/CL0UD6LOCK/kiln/internal/base"
 	_ "github.com/go-sql-driver/mysql"
@@ -125,5 +126,171 @@ func TestClaim_EmptyQueue(t *testing.T) {
 	res, err := store.Claim(context.Background())
 	if !errors.Is(err, base.ErrNoTask) || res != nil {
 		t.Fatalf("Claim error")
+	}
+}
+
+func TestMarkSucceeded(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	db.Exec("DELETE FROM tasks")
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
+	err = store.MarkSucceeded(context.Background(), msg.ID)
+	if err != nil {
+		t.Fatalf("mark succeeded error: %v", err)
+	}
+	var status string
+	err = db.QueryRowContext(context.Background(), "SELECT status FROM tasks WHERE id = ?", msg.ID).Scan(&status)
+	if err != nil {
+		t.Fatalf("queryrow error: %v", err)
+	}
+	if status != "succeeded" {
+		t.Fatalf("status = %q, want succeeded", status)
+	}
+	err = store.MarkSucceeded(context.Background(), msg.ID) //再次marksucceedde，期望报错
+	if !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("second MarkSucceeded: got %v, want ErrTaskNotRunning", err)
+	}
+}
+
+func TestMarkFailed_Retry(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	db.Exec("DELETE FROM tasks")
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload:     []byte(`{}`),
+		MaxAttempts: 2,
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
+	err = store.MarkFailed(context.Background(), msg.ID, "boom")
+	if err != nil {
+		t.Fatalf("mark failed error: %v", err)
+	}
+	var status string
+	var attempts int
+	var lastErr string
+	err = db.QueryRowContext(context.Background(), "SELECT attempts, status, last_error FROM tasks WHERE id = ?", msg.ID).Scan(&attempts, &status, &lastErr)
+	if err != nil {
+		t.Fatalf("queryrow error: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("status = %q, want pending", status)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+	if lastErr != "boom" {
+		t.Fatalf("last_error = %q, want boom", lastErr)
+	}
+	_, err = store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) { //指数退避未生效
+		t.Fatalf("err = %v, want ErrNoTask", err)
+	}
+}
+
+func TestMarkFailed_Final(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	db.Exec("DELETE FROM tasks")
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload:     []byte(`{}`),
+		MaxAttempts: 2,
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
+	err = store.MarkFailed(context.Background(), msg.ID, "boom")
+	if err != nil {
+		t.Fatalf("mark failed error: %v", err)
+	}
+	var status string
+	var attempts int
+	var lastErr string
+	err = db.QueryRowContext(context.Background(), "SELECT attempts, status, last_error FROM tasks WHERE id = ?", msg.ID).Scan(&attempts, &status, &lastErr)
+	if err != nil {
+		t.Fatalf("queryrow error: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("status = %q, want pending", status)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+	if lastErr != "boom" {
+		t.Fatalf("last_error = %q, want boom", lastErr)
+	}
+	_, err = db.Exec("UPDATE tasks SET run_at = ? WHERE id = ?", time.Now().UTC(), msg.ID) //老版本：(用Now()测试错误，怀疑可能时间存在精度bug，改为往前推 1s)，实则是时区不同的bug
+	if err != nil {
+		t.Fatalf("Exec error: %v", err)
+	}
+	//踩坑点，Claim和mysql操作没有同步时区，claim用的utc，mysql用的本地时区，导致bug，统一改为UTC时区
+	res, err = store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
+	err = store.MarkFailed(context.Background(), msg.ID, "boom2")
+	if err != nil {
+		t.Fatalf("mark failed error: %v", err)
+	}
+	err = db.QueryRowContext(context.Background(), "SELECT attempts, status, last_error FROM tasks WHERE id = ?", msg.ID).Scan(&attempts, &status, &lastErr)
+	if err != nil {
+		t.Fatalf("queryrow error: %v", err)
+	}
+	if status != "failed" {
+		t.Fatalf("status = %q, want failed", status)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if lastErr != "boom2" {
+		t.Fatalf("last_error = %q, want boom2", lastErr)
+	}
+	_, err = store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) {
+		t.Fatalf("err = %v, want ErrNoTask", err)
+	}
+	_, err = db.Exec("UPDATE tasks SET run_at = ? WHERE id = ?", time.Now().UTC(), msg.ID)
+	if err != nil {
+		t.Fatalf("Exec error: %v", err)
+	}
+	_, err = store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) {
+		t.Fatalf("err = %v, want ErrNoTask", err)
 	}
 }
