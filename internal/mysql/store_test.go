@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/CL0UD6LOCK/kiln/internal/base"
 	_ "github.com/go-sql-driver/mysql"
@@ -251,10 +253,20 @@ func TestMarkFailed_Final(t *testing.T) {
 	if lastErr != "boom" {
 		t.Fatalf("last_error = %q, want boom", lastErr)
 	}
-	_, err = db.Exec("UPDATE tasks SET run_at = NOW() - INTERVAL 1 SECOND WHERE id = ?", msg.ID) //用Now()测试错误，可能时间存在精度bug，改为往前推 1s
+	_, err = db.Exec("UPDATE tasks SET run_at = NOW().UTC() WHERE id = ?", msg.ID) //用Now()测试错误，可能时间存在精度bug，改为往前推 1s
 	if err != nil {
 		t.Fatalf("Exec error: %v", err)
 	}
+	var runat_demo time.Time
+	var status_demo string //临时测试
+
+	err = db.QueryRow("SELECT run_at, status FROM tasks WHERE id = ?", msg.ID).Scan(&runat_demo, &status_demo)
+
+	if err != nil {
+		t.Fatalf("get run_at and status error: %v", err)
+	} //打印调试数据
+
+	fmt.Printf("\nrun_at: %v, status: %s\n", runat_demo, status_demo)
 	res, err = store.Claim(context.Background())
 	if err != nil {
 		t.Fatalf("claim error: %v", err)
@@ -283,7 +295,7 @@ func TestMarkFailed_Final(t *testing.T) {
 	if !errors.Is(err, base.ErrNoTask) {
 		t.Fatalf("err = %v, want ErrNoTask", err)
 	}
-	_, err = db.Exec("UPDATE tasks SET run_at = NOW() - INTERVAL 1 SECOND WHERE id = ?", msg.ID)
+	_, err = db.Exec("UPDATE tasks SET run_at = NOW().UTC() WHERE id = ?", msg.ID)
 	if err != nil {
 		t.Fatalf("Exec error: %v", err)
 	}
