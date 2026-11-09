@@ -252,7 +252,7 @@ func TestMarkFailed_Final(t *testing.T) {
 	if lastErr != "boom" {
 		t.Fatalf("last_error = %q, want boom", lastErr)
 	}
-	_, err = db.Exec("UPDATE tasks SET run_at = ? WHERE id = ?", time.Now().UTC(), msg.ID) //用Now()测试错误，可能时间存在精度bug，改为往前推 1s
+	_, err = db.Exec("UPDATE tasks SET run_at = ? WHERE id = ?", time.Now().UTC(), msg.ID) //老版本：(用Now()测试错误，怀疑可能时间存在精度bug，改为往前推 1s)，实则是时区不同的bug
 	if err != nil {
 		t.Fatalf("Exec error: %v", err)
 	}
