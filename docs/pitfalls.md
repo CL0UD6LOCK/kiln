@@ -1,4 +1,4 @@
-# Pitfalls / 踩坑记录
+# Pitfalls / bug日志
 
 ## 1. Claim 领不到刚改过 run_at 的任务（时区不一致）
 - **日期**：2026-11-09
