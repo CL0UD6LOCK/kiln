@@ -84,7 +84,7 @@ func (s *Store) MarkSucceeded(ctx context.Context, id int64) error {
 }
 
 func (s *Store) MarkFailed(ctx context.Context, id int64, errMsg string) error {
-	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET attempts=attempts+1,last_error=?,status=IF(attempts>=max_attempts,?,?),run_at=NOW()+INTERVAL POW(2,attempts) SECOND,updated_at=NOW() WHERE id=? AND status=?", errMsg, base.StatusFailed, base.StatusPending, id, base.StatusRunning)
+	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET attempts=attempts+1,last_error=?,status=IF(attempts>=max_attempts,?,?),run_at=NOW()+INTERVAL POW(2,attempts) SECOND,updated_at=NOW() WHERE id=? AND status=?", errMsg, base.StatusFailed, base.StatusPending, id, base.StatusRunning) //NOW()+2^n(second)
 	if err != nil {
 		return fmt.Errorf("mark failed id=%d: %w", id, err)
 	}

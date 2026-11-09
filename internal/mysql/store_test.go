@@ -127,3 +127,48 @@ func TestClaim_EmptyQueue(t *testing.T) {
 		t.Fatalf("Claim error")
 	}
 }
+
+func TestMarkSucceeded(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	db.Exec("DELETE FROM tasks")
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if res.ID != msg.ID {
+		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
+	}
+	err = store.MarkSucceeded(context.Background(), msg.ID)
+	if err != nil {
+		t.Fatalf("mark succeeded error: %v", err)
+	}
+	var status string
+	err = db.QueryRowContext(context.Background(), "SELECT status FROM tasks WHERE id = ?", msg.ID).Scan(&status)
+	if err != nil {
+		t.Fatalf("queryrow error: %v", err)
+	}
+	if status != "succeeded" {
+		t.Fatalf("status = %q, want succeeded", status)
+	}
+	err = store.MarkSucceeded(context.Background(), msg.ID) //再次marksucceedde，期望报错
+	if !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("second MarkSucceeded: got %v, want ErrTaskNotRunning", err)
+	}
+}
+
+func TestMarkFailed_Retry(t *testing.T) {
+
+}
+
+func TestMarkFailed_Final(t *testing.T) {
+
+}
