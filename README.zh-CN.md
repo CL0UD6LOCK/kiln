@@ -81,9 +81,9 @@ MIT
 ```mermaid
 stateDiagram-v2
     [*] --> Pending
-    Pending --> Running: worker 领取（run_at <= now）
-    Running --> Succeeded: handler 返回 nil
-    Running --> Pending: handler 返回错误且 attempts#lt;max_attempts
+    Pending --> Running: worker claims (run_at <= now)
+    Running --> Succeeded: handler==nil
+    Running --> Pending: handler!=nil&&attempts#lt;max_attempts
     Running --> Failed: attempts>=max_attempts
     Succeeded --> [*]
     Failed --> [*]
