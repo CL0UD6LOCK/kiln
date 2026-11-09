@@ -256,16 +256,6 @@ func TestMarkFailed_Final(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Exec error: %v", err)
 	}
-	// var runat_demo time.Time
-	// var status_demo string //临时测试
-
-	// err = db.QueryRow("SELECT run_at, status FROM tasks WHERE id = ?", msg.ID).Scan(&runat_demo, &status_demo)
-
-	// if err != nil {
-	// 	t.Fatalf("get run_at and status error: %v", err)
-	// } //打印调试数据
-
-	//fmt.Printf("\nrun_at: %v, status: %s\n", runat_demo, status_demo)
 	//踩坑点，Claim和mysql操作没有同步时区，claim用的utc，mysql用的本地时区，导致bug，统一改为UTC时区
 	res, err = store.Claim(context.Background())
 	if err != nil {
