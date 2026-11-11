@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -56,6 +57,46 @@ func TestE2E_MixedResults(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	//res, err := db.ExecContext(context.Background(), "SELECT * FROM tasks WHERE status = failed OR status = succeeded")
-	// TODO: 断言每个任务的 status / attempts / last_error
+
+	rows, err := db.QueryContext(context.Background(), "SELECT id,status,attempts,last_error FROM tasks ORDER BY id")
+	if err != nil {
+		t.Fatalf("querycontext error: %v", err)
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var id int
+		var status string
+		var attempts int
+		var lastErr sql.NullString
+		err = rows.Scan(&id, &status, &attempts, &lastErr)
+		if err != nil {
+			t.Fatalf("rows scan error: %v", err)
+		}
+		if id%2 == 1 {
+			if status != "failed" {
+				t.Errorf("task %d: status = %q, want failed", id, status)
+			}
+			if attempts != 2 {
+				t.Errorf("task %d: attempts = %d, want 2", id, attempts)
+			}
+			if lastErr.String != "intentional failure: odd ID" {
+				t.Errorf("task %d: last_error = %q, want \"intentional failure: odd ID\"", id, lastErr.String)
+			}
+		} else {
+			if status != "succeeded" {
+				t.Errorf("task %d: status = %q, want succeeded", id, status)
+			}
+			if attempts != 0 {
+				t.Errorf("task %d: attempts = %d, want 1", id, attempts)
+			}
+		}
+		count++
+	}
+	if count != 3 {
+		t.Fatal("tasks count error")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 }
