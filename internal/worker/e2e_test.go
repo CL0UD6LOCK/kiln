@@ -57,8 +57,5 @@ func TestE2E_MixedResults(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	//res, err := db.ExecContext(context.Background(), "SELECT * FROM tasks WHERE status = failed OR status = succeeded")
-	// TODO: handler 按 ID 奇偶决定成功/失败, MaxAttempts 设 2
-	// TODO: NewPool + Start, defer Shutdown
-	// TODO: 轮询 DB 直到终态任务数 == 3, 超时就 Fatal
 	// TODO: 断言每个任务的 status / attempts / last_error
 }
