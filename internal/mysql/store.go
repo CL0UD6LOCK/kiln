@@ -56,7 +56,7 @@ func (s *Store) Claim(ctx context.Context) (*base.TaskMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.ExecContext(ctx, "UPDATE tasks SET status = 'running' WHERE id = ?", msg.ID)
+	_, err = tx.ExecContext(ctx, "UPDATE tasks SET status = 'running', lease_until = ? WHERE id = ?", time.Now().UTC().Add(30*time.Second), msg.ID)
 	if err != nil {
 		return nil, err
 	}
