@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     last_error   TEXT            NULL,
     created_at   DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at   DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    lease_until  DATETIME(3)     NULL     DEFAULT NULL 
     PRIMARY KEY(id),
     KEY idx_status_run_at (status,run_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
