@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -56,7 +57,9 @@ func (s *Store) Claim(ctx context.Context) (*base.TaskMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.ExecContext(ctx, "UPDATE tasks SET status = 'running', lease_until = ? WHERE id = ?", time.Now().UTC().Add(30*time.Second), msg.ID)
+	msg.LeaseToken = rand.Text()
+	leaseUntil := time.Now().UTC().Add(30 * time.Second)
+	_, err = tx.ExecContext(ctx, "UPDATE tasks SET status = 'running', lease_until = ?, lease_token = ? WHERE id = ?", leaseUntil, msg.LeaseToken, msg.ID)
 	if err != nil {
 		return nil, err
 	}

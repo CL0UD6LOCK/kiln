@@ -29,6 +29,7 @@ type TaskMessage struct {
 	LastError   string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	LeaseToken  string
 }
 
 type Store interface {
