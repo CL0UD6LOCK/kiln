@@ -296,6 +296,9 @@ func TestMarkFailed_Final(t *testing.T) {
 }
 
 func TestClaim_ReclaimExpiredTask(t *testing.T) {
+	//未过期的running任务不能被领取
+	//过期后可以接管同一个任务，并生成新token
+	//接管后旧token无法标记成功，而新token可以
 	db := openTestDB(t)
 	defer db.Close()
 	resetTasks(t, db)
