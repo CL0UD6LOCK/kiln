@@ -50,7 +50,7 @@ func (s *Store) Claim(ctx context.Context) (*base.TaskMessage, error) {
 	defer tx.Rollback()
 
 	msg := &base.TaskMessage{}
-	err = tx.QueryRowContext(ctx, "SELECT id,type,payload FROM tasks WHERE status ='pending' AND run_at<=? ORDER BY run_at LIMIT 1 FOR UPDATE SKIP LOCKED", time.Now().UTC()).Scan(&msg.ID, &msg.Type, &msg.Payload)
+	err = tx.QueryRowContext(ctx, "SELECT id,type,payload FROM tasks WHERE status ='pending' AND ( run_at <= ? OR lease_token > ? ) ORDER BY run_at LIMIT 1 FOR UPDATE SKIP LOCKED", time.Now().UTC(), time.Now().UTC()).Scan(&msg.ID, &msg.Type, &msg.Payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, base.ErrNoTask
 	}

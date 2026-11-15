@@ -64,4 +64,23 @@ func TestPool_ProcessesAllTasks(t *testing.T) {
 			t.Fatalf("timeout: %d tasks not processed", len(want))
 		}
 	}
+	waitCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for {
+		var n int
+		err := db.QueryRowContext(waitCtx, "SELECT COUNT(*) FROM tasks WHERE status = ?", base.StatusSucceeded).Scan(&n)
+		if err != nil {
+			t.Fatalf("status succeeded tasks queryrow error: %v", err)
+		}
+		if n == 3 {
+			break
+		}
+		select {
+		case <-waitCtx.Done():
+			t.Fatalf("wait timeout: %d/3 succeeded", n)
+		case <-time.After(50 * time.Millisecond):
+			continue
+		}
+	}
 }
