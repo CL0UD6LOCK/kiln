@@ -148,7 +148,7 @@ func TestMarkSucceeded(t *testing.T) {
 	if res.ID != msg.ID {
 		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
 	}
-	err = store.MarkSucceeded(context.Background(), msg.ID)
+	err = store.MarkSucceeded(context.Background(), msg.ID, res.LeaseToken)
 	if err != nil {
 		t.Fatalf("mark succeeded error: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestMarkSucceeded(t *testing.T) {
 	if status != "succeeded" {
 		t.Fatalf("status = %q, want succeeded", status)
 	}
-	err = store.MarkSucceeded(context.Background(), msg.ID) //再次marksucceedde，期望报错
+	err = store.MarkSucceeded(context.Background(), msg.ID, res.LeaseToken) //再次marksucceedde，期望报错
 	if !errors.Is(err, base.ErrTaskNotRunning) {
 		t.Fatalf("second MarkSucceeded: got %v, want ErrTaskNotRunning", err)
 	}
@@ -186,7 +186,7 @@ func TestMarkFailed_Retry(t *testing.T) {
 	if res.ID != msg.ID {
 		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
 	}
-	err = store.MarkFailed(context.Background(), msg.ID, "boom")
+	err = store.MarkFailed(context.Background(), msg.ID, "boom", res.LeaseToken)
 	if err != nil {
 		t.Fatalf("mark failed error: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestMarkFailed_Final(t *testing.T) {
 	if res.ID != msg.ID {
 		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
 	}
-	err = store.MarkFailed(context.Background(), msg.ID, "boom")
+	err = store.MarkFailed(context.Background(), msg.ID, "boom", res.LeaseToken)
 	if err != nil {
 		t.Fatalf("mark failed error: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestMarkFailed_Final(t *testing.T) {
 	if res.ID != msg.ID {
 		t.Fatalf("Error: ID=%d, want %d", res.ID, msg.ID)
 	}
-	err = store.MarkFailed(context.Background(), msg.ID, "boom2")
+	err = store.MarkFailed(context.Background(), msg.ID, "boom2", res.LeaseToken)
 	if err != nil {
 		t.Fatalf("mark failed error: %v", err)
 	}

@@ -35,6 +35,6 @@ type TaskMessage struct {
 type Store interface {
 	Enqueue(ctx context.Context, msg *TaskMessage) error
 	Claim(ctx context.Context) (*TaskMessage, error)
-	MarkSucceeded(ctx context.Context, id int64) error
-	MarkFailed(ctx context.Context, id int64, errMsg string) error
+	MarkSucceeded(ctx context.Context, id int64, leaseToken string) error
+	MarkFailed(ctx context.Context, id int64, errMsg string, leaseToken string) error
 }

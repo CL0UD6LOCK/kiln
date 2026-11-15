@@ -71,8 +71,8 @@ func (s *Store) Claim(ctx context.Context) (*base.TaskMessage, error) {
 	return msg, nil
 }
 
-func (s *Store) MarkSucceeded(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET status=?,updated_at=? WHERE id=? AND status=?", base.StatusSucceeded, time.Now().UTC(), id, base.StatusRunning)
+func (s *Store) MarkSucceeded(ctx context.Context, id int64, leaseToken string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET status=?,updated_at=? WHERE id=? AND status=? AND lease_token = ? AND lease_until > ?", base.StatusSucceeded, time.Now().UTC(), id, base.StatusRunning, leaseToken, time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("mark succeeded id=%d: %w", id, err)
 	}
@@ -86,8 +86,8 @@ func (s *Store) MarkSucceeded(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *Store) MarkFailed(ctx context.Context, id int64, errMsg string) error {
-	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET attempts=attempts+1,last_error=?,status=IF(attempts>=max_attempts,?,?),run_at=?+INTERVAL POW(2,attempts) SECOND,updated_at=? WHERE id=? AND status=?", errMsg, base.StatusFailed, base.StatusPending, time.Now().UTC(), time.Now().UTC(), id, base.StatusRunning) //time.NOW().UTC()+2^n(second)
+func (s *Store) MarkFailed(ctx context.Context, id int64, errMsg string, leaseToken string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET attempts=attempts+1,last_error=?,status=IF(attempts>=max_attempts,?,?),run_at=?+INTERVAL POW(2,attempts) SECOND,updated_at=? WHERE id=? AND status=? AND lease_token = ? AND lease_until > ?", errMsg, base.StatusFailed, base.StatusPending, time.Now().UTC(), time.Now().UTC(), id, base.StatusRunning, leaseToken, time.Now().UTC()) //time.NOW().UTC()+2^n(second)
 	if err != nil {
 		return fmt.Errorf("mark failed id=%d: %w", id, err)
 	}

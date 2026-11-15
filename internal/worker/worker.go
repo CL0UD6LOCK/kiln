@@ -45,12 +45,12 @@ func (w *worker) run(ctx context.Context) {
 		}
 		err = w.handler(ctx, msg)
 		if err != nil {
-			if err := w.store.MarkFailed(ctx, msg.ID, err.Error()); err != nil {
+			if err := w.store.MarkFailed(ctx, msg.ID, err.Error(), msg.LeaseToken); err != nil {
 				log.Printf("kiln: mark task %d as failed: %v", msg.ID, err)
 			}
 			log.Printf("kiln: task %d failed: %v", msg.ID, err)
 		} else {
-			err = w.store.MarkSucceeded(ctx, msg.ID)
+			err = w.store.MarkSucceeded(ctx, msg.ID, msg.LeaseToken)
 			if err != nil {
 				log.Printf("kiln: mark task %d as succeeded: %v", msg.ID, err)
 			}
