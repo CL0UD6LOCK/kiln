@@ -312,6 +312,9 @@ func TestClaim_ReclaimExpiredTask(t *testing.T) {
 		t.Fatalf("claim error: %v", err)
 	}
 	_, err = store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) {
+		t.Fatalf("claim unexpired task: got %v, want errnotask", err)
+	}
 	if err != base.ErrNoTask {
 		t.Fatalf("claim error: %v, want errnotask", err)
 	}
@@ -333,13 +336,7 @@ func TestClaim_ReclaimExpiredTask(t *testing.T) {
 	if !errors.Is(err, base.ErrTaskNotRunning) {
 		t.Fatalf("expired token: got %v, want errtasknotrunning", err)
 	}
-	if err == nil {
-		t.Fatalf("marksucceeded error: nil, want != nil")
-	}
 	err = store.MarkSucceeded(context.Background(), b.ID, b.LeaseToken)
-	if errors.Is(err, base.ErrNoTask) {
-		t.Fatalf("claim unexpired task: got %v, want errnotask", err)
-	}
 	if err != nil {
 		t.Fatalf("marksucceeded error: %v, want nil", err)
 	}
