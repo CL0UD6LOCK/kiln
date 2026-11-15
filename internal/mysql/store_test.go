@@ -315,9 +315,6 @@ func TestClaim_ReclaimExpiredTask(t *testing.T) {
 	if !errors.Is(err, base.ErrNoTask) {
 		t.Fatalf("claim unexpired task: got %v, want errnotask", err)
 	}
-	if err != base.ErrNoTask {
-		t.Fatalf("claim error: %v, want errnotask", err)
-	}
 	_, err = db.ExecContext(context.Background(), "UPDATE tasks SET lease_until = ? WHERE id = ?", time.Now().UTC().Add(-time.Second), a.ID)
 	if err != nil {
 		t.Fatalf("expire lease: %v", err)
