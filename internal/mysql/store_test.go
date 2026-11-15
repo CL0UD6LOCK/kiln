@@ -294,3 +294,53 @@ func TestMarkFailed_Final(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNoTask", err)
 	}
 }
+
+func TestClaim_ReclaimExpiredTask(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	resetTasks(t, db)
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	a, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	_, err = store.Claim(context.Background())
+	if err != base.ErrNoTask {
+		t.Fatalf("claim error: %v, want errnotask", err)
+	}
+	_, err = db.ExecContext(context.Background(), "UPDATE tasks SET lease_until = ? WHERE id = ?", time.Now().UTC().Add(-time.Second), a.ID)
+	if err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+	b, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("reclaim error: %v", err)
+	}
+	if a.ID != b.ID {
+		t.Fatalf("task id error: %d, want %d", b.ID, a.ID)
+	}
+	if a.LeaseToken == b.LeaseToken {
+		t.Fatalf("error: leasetoken no change %s : %s", a.LeaseToken, b.LeaseToken)
+	}
+	err = store.MarkSucceeded(context.Background(), a.ID, a.LeaseToken)
+	if !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("expired token: got %v, want errtasknotrunning", err)
+	}
+	if err == nil {
+		t.Fatalf("marksucceeded error: nil, want != nil")
+	}
+	err = store.MarkSucceeded(context.Background(), b.ID, b.LeaseToken)
+	if errors.Is(err, base.ErrNoTask) {
+		t.Fatalf("claim unexpired task: got %v, want errnotask", err)
+	}
+	if err != nil {
+		t.Fatalf("marksucceeded error: %v, want nil", err)
+	}
+}
