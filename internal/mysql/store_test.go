@@ -341,3 +341,45 @@ func TestClaim_ReclaimExpiredTask(t *testing.T) {
 		t.Fatalf("marksucceeded error: %v, want nil", err)
 	}
 }
+
+func TestClaim_ExpiredLeaseRejected(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	resetTasks(t, db)
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	a, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	_, err = db.ExecContext(context.Background(), "UPDATE tasks SET lease_until = ? WHERE id = ?", time.Now().UTC().Add(-time.Second), a.ID)
+	if err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+	err = store.MarkSucceeded(context.Background(), a.ID, a.LeaseToken)
+	if !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("marksucceeded error: %v, want errtasknotrunning", err)
+	}
+	err = store.MarkFailed(context.Background(), a.ID, a.LastError, a.LeaseToken)
+	if !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("markfailed error: %v, want errtasknotrunning", err)
+	}
+	var status string
+	var attempts int
+	err = db.QueryRowContext(
+		context.Background(),
+		"SELECT status, attempts FROM tasks WHERE id = ?", a.ID,
+	).Scan(&status, &attempts)
+	if err != nil {
+		t.Fatalf("query task: %v", err)
+	}
+	if status != string(base.StatusRunning) || attempts != 0 {
+		t.Fatalf("got status=%q attempts=%d, want running and 0", status, attempts)
+	}
+}
