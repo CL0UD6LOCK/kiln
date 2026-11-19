@@ -30,6 +30,7 @@ type TaskMessage struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	LeaseToken  string
+	LeaseUntil  time.Time
 }
 
 type Store interface {

@@ -383,3 +383,42 @@ func TestClaim_ExpiredLeaseRejected(t *testing.T) {
 		t.Fatalf("got status=%q attempts=%d, want running and 0", status, attempts)
 	}
 }
+
+func TestHeartbeat_ExtendsLease(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	resetTasks(t, db)
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	_, err = db.ExecContext(context.Background(), "UPDATE tasks SET lease_until = ? WHERE id = ?", res.LeaseUntil.Add(-20*time.Second), res.ID)
+	if err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+	var before time.Time
+	err = db.QueryRowContext(context.Background(), "SELECT lease_until FROM tasks WHERE id = ?", res.ID).Scan(&before)
+	if err != nil {
+		t.Fatalf("read lease before heartbeat: %v", err)
+	}
+	err = store.Heartbeat(context.Background(), res.ID, res.LeaseToken)
+	if err != nil {
+		t.Fatalf("heartbeat error:%v", err)
+	}
+	var after time.Time
+	err = db.QueryRowContext(context.Background(), "SELECT lease_until FROM tasks WHERE id = ?", res.ID).Scan(&after)
+	if err != nil {
+		t.Fatalf("read lease after heartbeat: %v", err)
+	}
+	if !after.After(before) {
+		t.Fatalf("lease did not extend: before=%v, after=%v", before, after)
+	}
+}

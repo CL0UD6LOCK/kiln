@@ -60,6 +60,7 @@ func (s *Store) Claim(ctx context.Context) (*base.TaskMessage, error) {
 	}
 	msg.LeaseToken = rand.Text()
 	leaseUntil := time.Now().UTC().Add(30 * time.Second)
+	msg.LeaseUntil = leaseUntil
 	_, err = tx.ExecContext(ctx, "UPDATE tasks SET status = 'running', lease_until = ?, lease_token = ? WHERE id = ?", leaseUntil, msg.LeaseToken, msg.ID)
 	if err != nil {
 		return nil, err
