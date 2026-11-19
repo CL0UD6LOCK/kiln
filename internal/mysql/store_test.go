@@ -422,3 +422,62 @@ func TestHeartbeat_ExtendsLease(t *testing.T) {
 		t.Fatalf("lease did not extend: before=%v, after=%v", before, after)
 	}
 }
+
+func TestHeartbeat_RejectsExpiredLease(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	resetTasks(t, db)
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	res, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	_, err = db.ExecContext(context.Background(), "UPDATE tasks SET lease_until = ? WHERE id = ?", time.Now().UTC().Add(-time.Second), res.ID)
+	if err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+	err = store.Heartbeat(context.Background(), res.ID, res.LeaseToken)
+	if !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("Heartbeat error = %v, want ErrTaskNotRunning", err)
+	}
+}
+
+func TestHeartbeat_RejectsOldLeaseToken(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	resetTasks(t, db)
+	store := NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	a, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	_, err = db.ExecContext(context.Background(), "UPDATE tasks SET lease_until = ? WHERE id = ?", time.Now().UTC().Add(-time.Second), a.ID)
+	if err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+	b, err := store.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim error: %v", err)
+	}
+	if a.ID != b.ID {
+		t.Fatalf("id changed: a=%d, b=%d", a.ID, b.ID)
+	}
+	err = store.Heartbeat(context.Background(), b.ID, a.LeaseToken)
+	if !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("Heartbeat error = %v, want ErrTaskNotRunning", err)
+	}
+}
