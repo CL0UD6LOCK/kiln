@@ -43,7 +43,9 @@ func (w *worker) run(ctx context.Context) {
 				continue //空队列是正常情况
 			}
 		}
-		err = w.handler(ctx, msg)
+		taskCtx, cancelTask := context.WithCancel(ctx)
+		err = w.handler(taskCtx, msg)
+		cancelTask()
 		if err != nil {
 			if err := w.store.MarkFailed(ctx, msg.ID, err.Error(), msg.LeaseToken); err != nil {
 				log.Printf("kiln: mark task %d as failed: %v", msg.ID, err)
