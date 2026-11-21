@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"log"
 	"os"
 	"testing"
 	"time"
@@ -83,4 +85,41 @@ func TestPool_ProcessesAllTasks(t *testing.T) {
 			continue
 		}
 	}
+}
+
+type leaseLostStore struct {
+	base.Store
+	claimed bool
+}
+
+func (s *leaseLostStore) Claim(ctx context.Context) (*base.TaskMessage, error) {
+	if s.claimed {
+		return nil, base.ErrNoTask
+	}
+	s.claimed = true
+	return &base.TaskMessage{ID: 1, LeaseToken: "test-token"}, nil
+}
+func (s *leaseLostStore) Heartbeat(ctx context.Context, id int64, token string) error {
+	return base.ErrTaskNotRunning
+}
+func TestWorker_CancelsHandlerOnLeaseLoss(t *testing.T) {
+	observed := make(chan error, 1)
+
+	handler := func(ctx context.Context, msg *base.TaskMessage) error {
+		<-ctx.Done()
+		observed <- ctx.Err()
+		return ctx.Err()
+	}
+	pool := NewPool(&leaseLostStore{}, handler, 1, 50*time.Millisecond)
+	pool.Start()
+	defer pool.Shutdown()
+	select {
+	case err := <-observed:
+		if errors.Is(err, context.Canceled) {
+			log.Printf("handler returned %v, want context.Cancelled", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatalf("handler did not observe cancellation within 15 seconds")
+	}
+
 }
