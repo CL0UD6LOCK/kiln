@@ -43,9 +43,30 @@ func (w *worker) run(ctx context.Context) {
 				continue //空队列是正常情况
 			}
 		}
+
 		taskCtx, cancelTask := context.WithCancel(ctx)
+		heartbeatDone := make(chan error, 1)
+
+		go func(id int64, token string) {
+			heartbeatErr := w.heartbeat(taskCtx, id, token)
+			if heartbeatErr != nil {
+				cancelTask()
+			}
+			heartbeatDone <- heartbeatErr
+		}(msg.ID, msg.LeaseToken)
+
 		err = w.handler(taskCtx, msg)
 		cancelTask()
+
+		heartbeatErr := <-heartbeatDone
+		if ctx.Err() != nil {
+			return
+		}
+		if heartbeatErr != nil && !errors.Is(heartbeatErr, context.Canceled) {
+			log.Printf("kiln: heartbeat failed for task %d: %v", msg.ID, heartbeatErr)
+			continue
+		}
+
 		if err != nil {
 			if err := w.store.MarkFailed(ctx, msg.ID, err.Error(), msg.LeaseToken); err != nil {
 				log.Printf("kiln: mark task %d as failed: %v", msg.ID, err)
