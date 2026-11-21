@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"os"
 	"testing"
 	"time"
@@ -115,8 +114,8 @@ func TestWorker_CancelsHandlerOnLeaseLoss(t *testing.T) {
 	defer pool.Shutdown()
 	select {
 	case err := <-observed:
-		if errors.Is(err, context.Canceled) {
-			log.Printf("handler returned %v, want context.Cancelled", err)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("handler returned %v, want context.Cancelled", err)
 		}
 	case <-time.After(15 * time.Second):
 		t.Fatalf("handler did not observe cancellation within 15 seconds")
