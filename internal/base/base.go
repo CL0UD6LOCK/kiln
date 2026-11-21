@@ -38,4 +38,5 @@ type Store interface {
 	Claim(ctx context.Context) (*TaskMessage, error)
 	MarkSucceeded(ctx context.Context, id int64, leaseToken string) error
 	MarkFailed(ctx context.Context, id int64, errMsg string, leaseToken string) error
+	Heartbeat(ctx context.Context, id int64, leaseToken string) error
 }
