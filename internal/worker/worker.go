@@ -60,6 +60,23 @@ func (w *worker) run(ctx context.Context) {
 	}
 }
 
+func (w *worker) heartbeat(ctx context.Context, id int64, token string) error {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			err := w.store.Heartbeat(ctx, id, token)
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
 func NewPool(store base.Store, h Handler, concurrency int, pollInterval time.Duration) *Pool {
 	return &Pool{
 		store:        store,

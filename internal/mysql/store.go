@@ -106,7 +106,7 @@ func (s *Store) MarkFailed(ctx context.Context, id int64, errMsg string, leaseTo
 func (s *Store) Heartbeat(ctx context.Context, id int64, leaseToken string) error {
 	res, err := s.db.ExecContext(ctx, "UPDATE tasks SET lease_until=? WHERE id=? AND status=? AND lease_token = ? AND lease_until > ?", time.Now().UTC().Add(30*time.Second), id, base.StatusRunning, leaseToken, time.Now().UTC())
 	if err != nil {
-		return fmt.Errorf("mark succeeded id=%d: %w", id, err)
+		return fmt.Errorf("heartbeat task id=%d: %w", id, err)
 	}
 	rowscount, err := res.RowsAffected()
 	if err != nil {
