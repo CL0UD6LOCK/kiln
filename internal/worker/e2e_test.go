@@ -127,7 +127,13 @@ func TestWorker_HeartbeatPreventsDuplicateClaim(t *testing.T) {
 	pool := NewPool(store, h, 1, 50*time.Millisecond)
 	pool.Start()
 	defer pool.Shutdown()
-	time.Sleep(30 * time.Second)
+	var claimed *base.TaskMessage
+	select {
+	case claimed = <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("worker did not claim the task within 5 seconds")
+	}
+	t.Logf("task %d, initial lease until %v", claimed.ID, claimed.LeaseUntil)
 	_, err = store.Claim(context.Background())
 	if !errors.Is(err, base.ErrNoTask) {
 		t.Fatalf("claim error: %v, want errnotask", err)
