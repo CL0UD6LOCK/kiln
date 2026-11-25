@@ -134,6 +134,19 @@ func TestWorker_HeartbeatPreventsDuplicateClaim(t *testing.T) {
 		t.Fatalf("worker did not claim the task within 5 seconds")
 	}
 	t.Logf("task %d, initial lease until %v", claimed.ID, claimed.LeaseUntil)
+	time.Sleep(time.Until(claimed.LeaseUntil.Add(time.Millisecond)))
+	var leaseUntil time.Time
+	var leaseToken string
+	err = db.QueryRow("SELECT lease_until, lease_token FROM tasks WHERE id = ? AND status = ?", claimed.ID, base.StatusRunning).Scan(&leaseUntil, &leaseToken)
+	if err != nil {
+		t.Fatalf("read running task lease: %v", err)
+	}
+	if leaseToken != claimed.LeaseToken {
+		t.Fatalf("worker A lost ownership of the task")
+	}
+	if !leaseUntil.After(time.Now()) {
+		t.Fatalf("lease expired at %v", leaseUntil)
+	}
 	_, err = store.Claim(context.Background())
 	if !errors.Is(err, base.ErrNoTask) {
 		t.Fatalf("claim error: %v, want errnotask", err)
