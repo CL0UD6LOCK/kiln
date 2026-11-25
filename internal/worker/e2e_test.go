@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -98,5 +99,37 @@ func TestE2E_MixedResults(t *testing.T) {
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestWorker_HeartbeatPreventsDuplicateClaim(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	db.Exec("DELETE FROM tasks")
+	store := mysql.NewStore(db)
+	msg := &base.TaskMessage{
+		Payload: []byte(`{}`),
+	}
+	err := store.Enqueue(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("Enqueue error: %v", err)
+	}
+	started := make(chan *base.TaskMessage, 1)
+	h := func(ctx context.Context, msg *base.TaskMessage) error {
+		select {
+		case started <- msg:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	pool := NewPool(store, h, 1, 50*time.Millisecond)
+	pool.Start()
+	defer pool.Shutdown()
+	time.Sleep(30 * time.Second)
+	_, err = store.Claim(context.Background())
+	if !errors.Is(err, base.ErrNoTask) {
+		t.Fatalf("claim error: %v, want errnotask", err)
 	}
 }
