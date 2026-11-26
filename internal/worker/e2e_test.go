@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -150,5 +151,115 @@ func TestWorker_HeartbeatPreventsDuplicateClaim(t *testing.T) {
 	_, err = store.Claim(context.Background())
 	if !errors.Is(err, base.ErrNoTask) {
 		t.Fatalf("claim error: %v, want errnotask", err)
+	}
+}
+
+func TestWorker_ReclaimsTaskAfterLeaseExpires(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	if _, err := db.ExecContext(ctx, "DELETE FROM tasks"); err != nil {
+		t.Fatalf("reset tasks: %v", err)
+	}
+	store := mysql.NewStore(db)
+	task := &base.TaskMessage{Type: "test", Payload: []byte(`{}`)}
+	if err := store.Enqueue(ctx, task); err != nil {
+		t.Fatalf("enqueue task: %v", err)
+	}
+
+	startedA := make(chan *base.TaskMessage, 1)
+	poolA := NewPool(store, func(ctx context.Context, msg *base.TaskMessage) error {
+		select {
+		case startedA <- msg:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	}, 1, 50*time.Millisecond)
+	poolA.Start()
+	stopA := sync.OnceFunc(poolA.Shutdown)
+	defer stopA()
+
+	var claimedA *base.TaskMessage
+	select {
+	case claimedA = <-startedA:
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker A did not claim the task within 5 seconds")
+	}
+	stopA()
+
+	var leaseUntil time.Time
+	err := db.QueryRowContext(ctx,
+		"SELECT lease_until FROM tasks WHERE id = ? AND status = ? AND lease_token = ?",
+		task.ID, base.StatusRunning, claimedA.LeaseToken,
+	).Scan(&leaseUntil)
+	if err != nil {
+		t.Fatalf("read worker A's running lease after shutdown: %v", err)
+	}
+	if _, err := store.Claim(ctx); !errors.Is(err, base.ErrNoTask) {
+		t.Fatalf("claim before lease expiry: got %v, want %v", err, base.ErrNoTask)
+	}
+	t.Logf("worker A stopped; task %d remains leased until %v", task.ID, leaseUntil)
+
+	startedB := make(chan *base.TaskMessage, 1)
+	finishB := make(chan struct{})
+	poolB := NewPool(store, func(ctx context.Context, msg *base.TaskMessage) error {
+		select {
+		case startedB <- msg:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		select {
+		case <-finishB:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}, 1, 50*time.Millisecond)
+	poolB.Start()
+	defer poolB.Shutdown()
+
+	var claimedB *base.TaskMessage
+	select {
+	case claimedB = <-startedB:
+	case <-ctx.Done():
+		t.Fatalf("worker B did not claim the task after lease expiry at %v: %v", leaseUntil, ctx.Err())
+	}
+	if time.Now().Before(leaseUntil) {
+		t.Fatalf("worker B started before worker A's lease expired at %v", leaseUntil)
+	}
+	if claimedB.ID != task.ID {
+		t.Fatalf("worker B claimed task %d, want %d", claimedB.ID, task.ID)
+	}
+	if claimedB.LeaseToken == "" || claimedB.LeaseToken == claimedA.LeaseToken {
+		t.Fatalf("worker B did not get a new lease token for task %d", task.ID)
+	}
+	if err := store.MarkSucceeded(ctx, task.ID, claimedA.LeaseToken); !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("mark succeeded with worker A's token: got %v, want %v", err, base.ErrTaskNotRunning)
+	}
+	if err := store.MarkFailed(ctx, task.ID, "stale worker A", claimedA.LeaseToken); !errors.Is(err, base.ErrTaskNotRunning) {
+		t.Fatalf("mark failed with worker A's token: got %v, want %v", err, base.ErrTaskNotRunning)
+	}
+	t.Logf("worker B reclaimed task %d; worker A's old token was rejected for both writes", task.ID)
+
+	close(finishB)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var status base.Status
+		if err := db.QueryRowContext(ctx, "SELECT status FROM tasks WHERE id = ?", task.ID).Scan(&status); err != nil {
+			t.Fatalf("read final task status: %v", err)
+		}
+		if status == base.StatusSucceeded {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatalf("worker B did not finish task %d, last status = %q: %v", task.ID, status, ctx.Err())
+		}
 	}
 }
