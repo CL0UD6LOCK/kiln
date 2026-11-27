@@ -1,90 +1,88 @@
-# kiln
+# Kiln
 
 [English](README.md) | **简体中文**
 
-kiln 是一个用 Go 编写、基于 MySQL 的简单可靠的分布式任务队列。
-把任务放进去，worker 负责执行，失败的任务会自动重试。
+Kiln 是一个用 Go 编写、以 MySQL 为存储的分布式任务队列。多个 worker 可以并发领取并执行任务，执行失败后按退避策略重试，租约到期后可重新领取未完成的任务。
 
-> ⚠️ 开发中，尚未达到生产可用。
+项目目前处于开发阶段。
 
-## 功能（规划中）
+## 已实现功能
 
-- 任务持久化存储在 MySQL 中
-- 多个 worker 并发安全地领取任务（`SKIP LOCKED`）
-- 失败自动重试，带退避
-- 基于租约（lease）恢复崩溃 worker 的任务
+- 将 JSON 任务持久化到 MySQL，并通过 `run_at` 指定任务最早可领取的时间。
+- 在事务内通过 `FOR UPDATE SKIP LOCKED` 领取任务，跳过其他事务已经锁定的记录。
+- handler 执行失败后按指数退避重试，达到配置的失败次数上限后将任务标为 `failed`。
+- 领取任务时发放 30 秒租约，handler 运行期间每 10 秒续租。租约到期后重新领取会获得新令牌。
+- 续租及写入成功、失败结果均需要有效的租约令牌。关闭 worker 池时取消 handler 的 context，并等待 worker 退出。
 
-## 路线图
-
-- [ ] v0.1 - 入队、领取、worker 池、确认、重试
-- [ ] v0.2 - 租约恢复、fencing、优雅关闭
-- [ ] v0.3 - 延时任务、指标、基准测试
-
-## 环境要求
-
-- Go 1.24+
-- MySQL 8.0+（需要支持 `FOR UPDATE SKIP LOCKED`）
-
-### DSN
-
-kiln 所有时间都以 **UTC** 存储和比较。DSN 必须带上 `parseTime=true`，
-并把会话时区设为 UTC：
-
-```
-user:password@tcp(127.0.0.1:3306)/kiln?parseTime=true&time_zone=%27%2B00%3A00%27
-```
-
-`time_zone=%27%2B00%3A00%27` 是 `time_zone='+00:00'` 的 URL 编码形式。
-如果不设置，MySQL 的 `CURRENT_TIMESTAMP` 等默认值会使用服务器本地时区，
-而 kiln 写入的是 UTC，重试可能会被推迟好几个小时。
-
-## 开发
-
-### 1. 创建数据库和表
-
-```sql
-CREATE DATABASE kiln;
-USE kiln;
-SOURCE migrations/001_create_tasks.sql;
-```
-
-### 2. 运行测试
-
-集成测试从环境变量 `KILN_TEST_DSN` 读取 DSN，未设置时会被**跳过**
-（跳过的测试也会显示 `PASS`，请确认输出里有 `--- PASS` 行）。
-
-PowerShell：
-
-```powershell
-$env:KILN_TEST_DSN = "root:<password>@tcp(127.0.0.1:3306)/kiln?parseTime=true&time_zone=%27%2B00%3A00%27"
-go test -p 1 -v ./...
-```
-
-bash：
-
-```bash
-export KILN_TEST_DSN="root:<password>@tcp(127.0.0.1:3306)/kiln?parseTime=true&time_zone=%27%2B00%3A00%27"
-go test -p 1 -v ./...
-```
-
-> 使用 `-p 1`：不同包的测试共用 `tasks` 表，并会执行 `DELETE FROM tasks` 清空它，
-> 所以不能并行运行。
-
-## 许可证
-
-MIT
-
-## 设计
-
-### 任务生命周期
+## 任务生命周期
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending
-    Pending --> Running: worker claims (run_at <= now)
-    Running --> Succeeded: handler==nil
-    Running --> Pending: handler!=nil&&attempts#lt;max_attempts
-    Running --> Failed: attempts>=max_attempts
-    Succeeded --> [*]
-    Failed --> [*]
+    [*] --> pending
+    pending --> running: worker 领取已到运行时间的任务
+    running --> succeeded: handler 返回 nil
+    running --> pending: 执行失败并安排重试
+    running --> failed: 达到配置的失败次数上限
+    running --> running: 租约到期后被重新领取
+    succeeded --> [*]
+    failed --> [*]
 ```
+
+worker 池停机后，未完成的任务保持 `running`，租约到期后才能被重新领取。任务接管后可能再次执行，handler 写入外部系统时需要保证操作幂等。
+
+## 运行演示
+
+需要 Go 1.24+ 和 MySQL 8.0+。
+
+### 1. 创建专用测试库
+
+在仓库根目录使用 `mysql -u root -p` 打开 MySQL 客户端，执行迁移。
+
+```sql
+CREATE DATABASE kiln_test;
+USE kiln_test;
+SOURCE migrations/001_create_tasks.sql;
+```
+
+### 2. 设置测试 DSN
+
+测试会清空 `tasks` 表，请使用专用测试库。DSN 通过 `parseTime` 启用时间解析，并将会话时区设为 UTC。`%27%2B00%3A00%27` 是 `'+00:00'` 的 URL 编码值。
+
+**PowerShell**
+
+```powershell
+$env:KILN_TEST_DSN = 'root:<password>@tcp(127.0.0.1:3306)/kiln_test?parseTime=true&time_zone=%27%2B00%3A00%27'
+```
+
+**Bash**
+
+```bash
+export KILN_TEST_DSN='root:<password>@tcp(127.0.0.1:3306)/kiln_test?parseTime=true&time_zone=%27%2B00%3A00%27'
+```
+
+### 3. 运行 worker 测试
+
+```sh
+go test -v -count=1 -timeout 2m -run '^(TestE2E_MixedResults|TestWorker_HeartbeatPreventsDuplicateClaim|TestWorker_ReclaimsTaskAfterLeaseExpires)$' ./internal/worker
+```
+
+- `TestE2E_MixedResults` 启动两个 worker，检查入队的三个任务是否成功或在重试后进入最终失败状态。
+- `TestWorker_HeartbeatPreventsDuplicateClaim` 验证长任务跨过初始截止时间后仍持有有效租约，另一次领取找不到可领取的任务。
+- `TestWorker_ReclaimsTaskAfterLeaseExpires` 停止第一个 worker，等租约自然到期，验证第二个 worker 重新领取同一个任务。旧令牌无法写入成功或失败结果，第二个 worker 能正常完成任务。
+
+演示约需一分钟。请确认三个用例都打印了 `--- PASS`。
+
+运行全套测试时沿用同一个 DSN。MySQL 和 worker 两个包共用测试表，所以通过 `-p 1` 串行运行。
+
+```sh
+go test -p 1 -v -count=1 -timeout 3m ./...
+```
+
+## 路线图
+
+- 指标
+- 基准测试
+
+## 许可证
+
+[MIT](LICENSE)
