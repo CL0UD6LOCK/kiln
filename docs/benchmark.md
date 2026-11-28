@@ -38,6 +38,35 @@ Eight workers had the highest median throughput in this session. Single-worker r
 | 8 | 2 | 35.35 | 5,000 | 141.4 | 171 |
 | 8 | 3 | 35.55 | 5,000 | 140.7 | 173 |
 
+## Claim isolation comparison · 领取事务隔离级别对照
+
+Run on 2026-11-28 at revision `876bf9a` on the same Windows and MySQL 8.0.46 setup described above, with row-based binary logging. Each pair ran `REPEATABLE READ` followed by `READ COMMITTED`, with four workers and 5,000 pre-enqueued tasks per batch. The two builds differed only in the isolation passed to `Claim`'s `BeginTx`.
+
+本轮于 2026-11-28 在 `876bf9a` 上完成，沿用上述 Windows 和 MySQL 8.0.46 环境，binlog 格式为 `ROW`。每对先跑 `REPEATABLE READ`，再跑 `READ COMMITTED`，每轮 4 个 worker、提前入队 5,000 个任务。两个构建只改变了 `Claim` 调用 `BeginTx` 时传入的隔离级别。
+
+| Pair / 轮次 | Claim isolation / 领取隔离级别 | Time / 耗时（秒） | Succeeded / 成功数 | Tasks/s / 吞吐 | Claim deadlocks / 领取死锁（1213） |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1 | REPEATABLE READ | 13.26 | 5,000 | 377.0 | 159 |
+| 1 | READ COMMITTED | 30.32 | 5,000 | 164.9 | 0 |
+| 2 | REPEATABLE READ | 46.67 | 5,000 | 107.1 | 141 |
+| 2 | READ COMMITTED | 47.77 | 5,000 | 104.7 | 0 |
+| 3 | REPEATABLE READ | 46.11 | 5,000 | 108.4 | 172 |
+| 3 | READ COMMITTED | 47.36 | 5,000 | 105.6 | 0 |
+
+All 30,000 tasks reached `succeeded` with zero success write errors. MySQL 1213 occurred 472 times under `REPEATABLE READ` and zero times under `READ COMMITTED`. Median throughput was 108.4 and 105.6 tasks/s, respectively. The first pair varied substantially from the following pairs, so this run series leaves the throughput effect uncertain.
+
+共 30,000 个任务成功，成功写回错误为 0。`REPEATABLE READ` 共记录 472 次领取死锁，`READ COMMITTED` 为 0。吞吐中位数分别为 108.4 和 105.6 个任务/秒。第一对与后两对的吞吐相差较大，这组数据还不足以确定隔离级别对吞吐的影响。
+
+### Reproduce the comparison · 复跑对照
+
+Set up `KILN_BENCH_DSN` as described below, then run this command in PowerShell. The [script](../scripts/bench-claim-isolation.ps1) builds both variants with Go overlays and reuses the worker benchmark. It runs three pairs by default. Pass `-Pairs 1` to run one pair.
+
+按下方说明设置 `KILN_BENCH_DSN` 后，在 PowerShell 中运行。脚本使用 Go overlay 构建两个版本，复用现有的 worker benchmark。默认跑三对，可用 `-Pairs 1` 只跑一对。
+
+```powershell
+./scripts/bench-claim-isolation.ps1
+```
+
 ## Initial single-worker run · 首轮单 worker 基线
 
 Recorded on 2026-11-28 at revision [`8fd2434`](https://github.com/CL0UD6LOCK/kiln/commit/8fd2434c01e4c525c77c89f2257b81599c98e7fa).
