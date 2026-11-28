@@ -78,10 +78,14 @@ go test -v -count=1 -timeout 2m -run '^(TestE2E_MixedResults|TestWorker_Heartbea
 go test -p 1 -v -count=1 -timeout 3m ./...
 ```
 
+## 压测结果
+
+单个 worker 在本机 MySQL 8.0.46 上处理完 5,000 个已入队任务，耗时 44.83 秒，吞吐为 111.54 个任务/秒。测试环境、计时范围和错误计数见[压测记录](docs/benchmark.md)。
+
 ## 路线图
 
 - 指标
-- 基准测试
+- 不同 worker 并发数的压测对比
 
 ## 许可证
 

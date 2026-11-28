@@ -78,10 +78,14 @@ Run the full suite with the same DSN. Use `-p 1` because the MySQL and worker pa
 go test -p 1 -v -count=1 -timeout 3m ./...
 ```
 
+## Benchmark
+
+A local MySQL 8.0.46 run with one worker completed 5,000 queued tasks in 44.83 seconds (111.54 tasks/s). See the [benchmark record](docs/benchmark.md) for the setup, timing, and error counts.
+
 ## Roadmap
 
 - Metrics
-- Benchmarks
+- Benchmarks across worker counts
 
 ## License
 
