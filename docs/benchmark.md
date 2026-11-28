@@ -1,5 +1,45 @@
 # MySQL worker benchmark · MySQL worker 压测
 
+## Three-run comparison · 三轮对照
+
+Run on 2026-11-28 at revision `7e6c20f` with Go 1.27.0 on Windows amd64 (Intel Core Ultra 9 185H). All 12 batches ran sequentially on the same local MySQL 8.0.46 instance, grouped by worker count. MySQL used `REPEATABLE-READ`, binary logging, `innodb_flush_log_at_trx_commit=1`, and `sync_binlog=1`.
+
+2026-11-28 在 `7e6c20f` 上测得。环境为 Windows amd64（Intel Core Ultra 9 185H）、Go 1.27.0 和同一个本机 MySQL 8.0.46 实例。按 worker 数分组顺序运行，每档三轮。MySQL 使用 `REPEATABLE-READ`，启用 binlog，`innodb_flush_log_at_trx_commit` 和 `sync_binlog` 均为 `1`。
+
+| Workers / worker 数 | Median tasks/s / 吞吐中位数 | Min–max tasks/s / 吞吐范围 | Claim deadlocks (1213) by run / 各轮领取死锁 |
+| ---: | ---: | ---: | ---: |
+| 1 | 81.43 | 80.72–158.0 | 0 / 0 / 0 |
+| 2 | 90.86 | 90.47–91.81 | 42 / 58 / 57 |
+| 4 | 107.6 | 105.8–110.1 | 146 / 116 / 160 |
+| 8 | 141.4 | 140.7–142.2 | 197 / 171 / 173 |
+
+All 60,000 tasks reached `succeeded`, with zero success write errors. All 1,120 claim errors were MySQL 1213 deadlocks, counted per failed claim attempt. The task table was empty after the final batch.
+
+共 60,000 个任务成功，成功写回错误为 0。1,120 次领取错误均为 MySQL 1213，按失败的领取尝试计数。最后一轮结束后任务表为空。
+
+Eight workers had the highest median throughput in this session. Single-worker results varied from 80.72 to 158.0 tasks/s. These measurements describe one local run series.
+
+本次 8 worker 的吞吐中位数最高。单 worker 的吞吐在 80.72–158.0 个任务/秒之间波动，结果反映本机这批测试。
+
+### Per-run results · 逐轮结果
+
+| Workers / worker 数 | Run / 轮次 | Time / 耗时（秒） | Succeeded / 成功数 | Tasks/s / 吞吐 | Claim deadlocks / 领取死锁（1213） |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1 | 31.65 | 5,000 | 158.0 | 0 |
+| 1 | 2 | 61.40 | 5,000 | 81.43 | 0 |
+| 1 | 3 | 61.94 | 5,000 | 80.72 | 0 |
+| 2 | 1 | 55.27 | 5,000 | 90.47 | 42 |
+| 2 | 2 | 54.46 | 5,000 | 91.81 | 58 |
+| 2 | 3 | 55.03 | 5,000 | 90.86 | 57 |
+| 4 | 1 | 47.28 | 5,000 | 105.8 | 146 |
+| 4 | 2 | 45.40 | 5,000 | 110.1 | 116 |
+| 4 | 3 | 46.48 | 5,000 | 107.6 | 160 |
+| 8 | 1 | 35.17 | 5,000 | 142.2 | 197 |
+| 8 | 2 | 35.35 | 5,000 | 141.4 | 171 |
+| 8 | 3 | 35.55 | 5,000 | 140.7 | 173 |
+
+## Initial single-worker run · 首轮单 worker 基线
+
 Recorded on 2026-11-28 at revision [`8fd2434`](https://github.com/CL0UD6LOCK/kiln/commit/8fd2434c01e4c525c77c89f2257b81599c98e7fa).
 
 | Metric / 指标 | Result / 结果 |
