@@ -1,5 +1,11 @@
 # MySQL worker benchmark · MySQL worker 压测
 
+![Kiln benchmark comparison showing throughput and claim deadlocks across worker counts and Claim isolation levels](benchmark-comparison.png)
+
+Open circles show individual runs. Diamonds and labels show the median for each group.
+
+空心圆表示单轮结果，菱形和旁边的数字表示各组中位数。
+
 ## Three-run comparison · 三轮对照
 
 Run on 2026-11-28 at revision `7e6c20f` with Go 1.27.0 on Windows amd64 (Intel Core Ultra 9 185H). All 12 batches ran sequentially on the same local MySQL 8.0.46 instance, grouped by worker count. MySQL used `REPEATABLE-READ`, binary logging, `innodb_flush_log_at_trx_commit=1`, and `sync_binlog=1`.
