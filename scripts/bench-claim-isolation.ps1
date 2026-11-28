@@ -1,12 +1,17 @@
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Benchmark')]
 param(
+    [Parameter(ParameterSetName = 'Benchmark')]
     [ValidateRange(1, 2147483647)]
-    [int] $Pairs = 3
+    [int] $Pairs = 3,
+
+    [Parameter(Mandatory, ParameterSetName = 'Regression')]
+    [switch] $Regression
 )
 
 $ErrorActionPreference = 'Stop'
-if ([string]::IsNullOrWhiteSpace($env:KILN_BENCH_DSN)) {
-    throw 'Set KILN_BENCH_DSN to a dedicated MySQL database with the Kiln migration applied.'
+$dsnVariable = if ($Regression) { 'KILN_TEST_DSN' } else { 'KILN_BENCH_DSN' }
+if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($dsnVariable))) {
+    throw "Set $dsnVariable to a dedicated MySQL test database with the Kiln migration applied."
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -25,7 +30,7 @@ $tempDir = Join-Path ([IO.Path]::GetTempPath()) ('kiln-claim-isolation-' + [Guid
 $null = [IO.Directory]::CreateDirectory($tempDir)
 $tempFiles = [System.Collections.Generic.List[string]]::new()
 $utf8 = [Text.UTF8Encoding]::new($false)
-$binaries = @{}
+$overlays = [ordered]@{}
 $benchmarkArgs = @(
     '-test.run=^$'
     '-test.bench=^BenchmarkWorkerConsumeMySQL$/^workers=4$'
@@ -39,17 +44,36 @@ try {
     foreach ($level in $levels.GetEnumerator()) {
         $sourcePath = Join-Path $tempDir "$($level.Value)-store.go"
         $overlayPath = Join-Path $tempDir "$($level.Value)-overlay.json"
-        $binaryPath = Join-Path $tempDir "$($level.Value)-worker.test.exe"
         $tempFiles.Add($sourcePath)
         $tempFiles.Add($overlayPath)
-        $tempFiles.Add($binaryPath)
 
         $beginWithIsolation = "s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.$($level.Value)})"
         [IO.File]::WriteAllText($sourcePath, $storeSource.Replace($beginClaim, $beginWithIsolation), $utf8)
         $overlay = @{ Replace = @{ $storePath = $sourcePath } } | ConvertTo-Json -Compress
         [IO.File]::WriteAllText($overlayPath, $overlay, $utf8)
+        $overlays[$level.Key] = $overlayPath
+    }
 
-        & go test -c -overlay $overlayPath -o $binaryPath ./internal/worker
+    if ($Regression) {
+        $failedLevels = @()
+        foreach ($level in $overlays.GetEnumerator()) {
+            Write-Output "Full regression - $($level.Key)"
+            & go test -overlay $level.Value -p 1 -v -count=1 -timeout 4m ./...
+            if ($LASTEXITCODE -ne 0) {
+                $failedLevels += $level.Key
+            }
+        }
+        if ($failedLevels.Count -ne 0) {
+            throw "Regression failed under $($failedLevels -join ', ')."
+        }
+        return
+    }
+
+    $binaries = @{}
+    foreach ($level in $overlays.GetEnumerator()) {
+        $binaryPath = [IO.Path]::ChangeExtension($level.Value, '.test.exe')
+        $tempFiles.Add($binaryPath)
+        & go test -c -overlay $level.Value -o $binaryPath ./internal/worker
         if ($LASTEXITCODE -ne 0) {
             throw "Could not compile the $($level.Key) benchmark."
         }

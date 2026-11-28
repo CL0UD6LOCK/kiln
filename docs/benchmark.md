@@ -67,6 +67,29 @@ Set up `KILN_BENCH_DSN` as described below, then run this command in PowerShell.
 ./scripts/bench-claim-isolation.ps1
 ```
 
+### Full regression · 全量回归
+
+On 2026-11-28, both variants built from `30452da` passed the full suite on local MySQL 8.0.46 with Go 1.27.0 on Windows amd64. Only the isolation of the `Claim` transaction differed. Each run executed 18 tests with zero skips and zero failures.
+
+2026-11-28 在 Windows amd64、Go 1.27.0 和本机 MySQL 8.0.46 上，以 `30452da` 为基础，只切换 `Claim` 事务的隔离级别。两种配置各实际运行 18 项，通过 18 项，跳过和失败均为 0。
+
+| Claim isolation / 领取隔离级别 | MySQL Store tests / Store 用例 | Worker tests / Worker 用例 |
+| --- | ---: | ---: |
+| `REPEATABLE READ` | 13/13 (0.300 s) | 5/5 (72.421 s) |
+| `READ COMMITTED` | 13/13 (0.277 s) | 5/5 (72.418 s) |
+
+The [Store tests](../internal/mysql/store_test.go) cover enqueue, claim, success, retries, terminal failure, and rejection of expired leases and old tokens. The [worker end-to-end tests](../internal/worker/e2e_test.go) verify that a heartbeat prevents duplicate claims, a stopped worker's task can be reclaimed after natural lease expiry, and the old token is rejected for both success and failure writes. The [worker cancellation test](../internal/worker/worker_test.go) also passed in both variants.
+
+Store 用例覆盖入队、领取、成功、重试、最终失败、过期租约和旧令牌拒绝。Worker 端到端用例确认长任务续租期间无法被重复领取，停机后可在租约自然到期时接管，旧令牌无法写入成功或失败结果。失租取消 handler 的用例也在两组通过。
+
+Apply the [migration](../migrations/001_create_tasks.sql) to a dedicated test database, set `KILN_TEST_DSN`, and run the command below. The tests clear the `tasks` table, and the runner uses `-p 1` because the packages share it.
+
+将 `KILN_TEST_DSN` 指向已应用迁移的专用测试库，再运行下面的命令。测试会清空 `tasks` 表，脚本使用 `-p 1` 串行运行共用这张表的包。
+
+```powershell
+./scripts/bench-claim-isolation.ps1 -Regression
+```
+
 ## Initial single-worker run · 首轮单 worker 基线
 
 Recorded on 2026-11-28 at revision [`8fd2434`](https://github.com/CL0UD6LOCK/kiln/commit/8fd2434c01e4c525c77c89f2257b81599c98e7fa).
