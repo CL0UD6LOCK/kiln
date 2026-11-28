@@ -13,6 +13,20 @@ Recorded on 2026-11-28 at revision [`8fd2434`](https://github.com/CL0UD6LOCK/kil
 | MySQL deadlocks (1213) during claims / 领取时的 MySQL 死锁（1213） | 0 |
 | Success write errors / 成功写回错误 | 0 |
 
+## Run the benchmark / 运行压测
+
+Create a dedicated MySQL database for the [benchmark](../internal/worker/benchmark_test.go), apply the [repository migration](../migrations/001_create_tasks.sql), and leave the task table empty. Set `KILN_BENCH_DSN` to its MySQL DSN. The benchmark cleans up its tasks after each batch.
+
+为[压测代码](../internal/worker/benchmark_test.go)新建专用 MySQL 库，应用[仓库迁移](../migrations/001_create_tasks.sql)，并保持任务表为空。将 `KILN_BENCH_DSN` 指向该库。每批结束后程序会清理本批任务。
+
+```sh
+go test -run '^$' -bench '^BenchmarkWorkerConsumeMySQL$' -benchtime=1x -count=3 -timeout 30m ./internal/worker
+```
+
+The command runs three batches of 5,000 tasks each for 1, 2, 4, and 8 workers.
+
+命令分别用 1、2、4、8 个 worker 各跑三轮，每轮 5,000 个任务。
+
 ## Method
 
 - Ran on Windows amd64 with Go 1.27.0 and a fresh local MySQL 8.0.46 database initialized with the [repository migration](../migrations/001_create_tasks.sql). Both `innodb_flush_log_at_trx_commit` and `sync_binlog` were set to `1`.
