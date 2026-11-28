@@ -17,9 +17,9 @@ if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($dsnVaria
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $storePath = Join-Path $repoRoot 'internal/mysql/store.go'
 $storeSource = [IO.File]::ReadAllText($storePath)
-$beginClaim = 's.db.BeginTx(ctx, nil)'
+$beginClaim = 's.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})'
 if ([regex]::Matches($storeSource, [regex]::Escape($beginClaim)).Count -ne 1) {
-    throw 'Expected exactly one default transaction in store.go for the Claim isolation overlay.'
+    throw 'Expected exactly one Claim transaction in store.go for the isolation overlay.'
 }
 
 $levels = [ordered]@{

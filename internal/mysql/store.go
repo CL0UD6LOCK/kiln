@@ -43,7 +43,7 @@ func (s *Store) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 }
 
 func (s *Store) Claim(ctx context.Context) (*base.TaskMessage, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return nil, err
 	}

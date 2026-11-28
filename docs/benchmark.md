@@ -90,6 +90,23 @@ Apply the [migration](../migrations/001_create_tasks.sql) to a dedicated test da
 ./scripts/bench-claim-isolation.ps1 -Regression
 ```
 
+### Adopted Claim isolation · 正式领取事务
+
+Kiln sets `READ COMMITTED` for each [`Claim` transaction](../internal/mysql/store.go). MySQL uses index-record locks for this locking read at that isolation level, which addresses the observed index-gap deadlock when a task changes status. For deployments with binary logging enabled, use `ROW` or `MIXED` so these transactions use row-based logging. [MySQL isolation levels](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html)
+
+Kiln 在每个 `Claim` 事务上显式指定 `READ COMMITTED`，让锁定读使用索引记录锁，针对压测中任务状态更新遇到的间隙锁死锁。启用了 binlog 的 MySQL 部署可使用 `ROW` 或 `MIXED`，使这些事务按行记录。
+
+On 2026-11-28, the regular build passed all 18 tests with zero skips on local MySQL 8.0.46. The server default was `REPEATABLE READ` and the binary log format was `ROW`. One four-worker benchmark completed all 5,000 tasks in 15.45 seconds (323.7 tasks/s), with zero claim errors, MySQL 1213 deadlocks, or success write errors.
+
+2026-11-28 使用正式代码在本机 MySQL 8.0.46 上回归，18 项用例全部通过，零跳过。服务端默认隔离级别为 `REPEATABLE READ`，binlog 格式为 `ROW`。单轮 4 worker 压测成功完成 5,000 个任务，耗时 15.45 秒，吞吐为 323.7 个任务/秒。领取错误、MySQL 1213 死锁和成功写回错误均为 0。
+
+With `KILN_TEST_DSN` and `KILN_BENCH_DSN` pointing to separate dedicated MySQL schemas, run the regular build with the following commands. 将两个 DSN 分别指向专用的回归库和压测库，再用以下命令验证正式代码。
+
+```sh
+go test -p 1 -v -count=1 -timeout 4m ./...
+go test -run '^$' -bench '^BenchmarkWorkerConsumeMySQL$/^workers=4$' -benchtime=1x -count=1 -timeout 4m ./internal/worker
+```
+
 ## Initial single-worker run · 首轮单 worker 基线
 
 Recorded on 2026-11-28 at revision [`8fd2434`](https://github.com/CL0UD6LOCK/kiln/commit/8fd2434c01e4c525c77c89f2257b81599c98e7fa).
